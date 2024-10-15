@@ -9,15 +9,24 @@ async function init() {
     if (await authClient.isAuthenticated()) {
         handleAuthenticated();
     } else {
-        renderLoginButton();
+        updateAuthButton(false);
     }
     renderHome();
 }
 
-function renderLoginButton() {
+function updateAuthButton(isAuthenticated) {
+    const authButton = document.getElementById('auth-button');
     const profileLink = document.getElementById('profile-link');
-    profileLink.textContent = 'Login';
-    profileLink.onclick = login;
+    
+    if (isAuthenticated) {
+        authButton.textContent = 'Logout';
+        authButton.onclick = logout;
+        profileLink.style.display = 'inline';
+    } else {
+        authButton.textContent = 'Login';
+        authButton.onclick = login;
+        profileLink.style.display = 'none';
+    }
 }
 
 async function login() {
@@ -27,6 +36,13 @@ async function login() {
     });
 }
 
+async function logout() {
+    await authClient.logout();
+    currentUser = null;
+    updateAuthButton(false);
+    renderHome();
+}
+
 async function handleAuthenticated() {
     try {
         const identity = await authClient.getIdentity();
@@ -34,27 +50,13 @@ async function handleAuthenticated() {
         if (!currentUser) {
             throw new Error("Failed to create or retrieve user");
         }
-        updateProfileLink();
+        updateAuthButton(true);
         renderHome();
     } catch (error) {
         console.error("Authentication error:", error);
         alert("An error occurred during authentication. Please try again.");
-        renderLoginButton();
+        updateAuthButton(false);
     }
-}
-
-function updateProfileLink() {
-    const profileLink = document.getElementById('profile-link');
-    profileLink.textContent = 'My Profile';
-    profileLink.onclick = () => {
-        if (currentUser && currentUser.id) {
-            renderProfile(currentUser.id);
-        } else {
-            console.error("Current user is not properly set");
-            alert("Please log in again to view your profile.");
-            renderLoginButton();
-        }
-    };
 }
 
 function renderHome() {
@@ -209,10 +211,10 @@ document.getElementById('profile-link').addEventListener('click', (e) => {
         } else {
             console.error("Current user is not properly set");
             alert("Please log in again to view your profile.");
-            renderLoginButton();
+            updateAuthButton(false);
         }
     } else {
-        login();
+        alert("Please log in to view your profile.");
     }
 });
 
