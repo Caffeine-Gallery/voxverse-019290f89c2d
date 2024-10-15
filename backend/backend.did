@@ -1,0 +1,25 @@
+type UserId = principal;
+type User = 
+ record {
+   bio: text;
+   id: UserId;
+   name: text;
+   picture: text;
+ };
+type Time = int;
+type BlogPost = 
+ record {
+   authorId: UserId;
+   content: text;
+   id: text;
+   timestamp: Time;
+   title: text;
+ };
+service : {
+  createBlogPost: (text, text) -> (BlogPost);
+  createUser: () -> (User);
+  getAllBlogPosts: () -> (vec BlogPost) query;
+  getBlogPostsByUser: (UserId) -> (vec BlogPost) query;
+  getUser: (UserId) -> (opt User) query;
+  updateUser: (text, text, text) -> (bool);
+}
