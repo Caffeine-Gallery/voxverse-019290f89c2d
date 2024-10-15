@@ -28,16 +28,33 @@ async function login() {
 }
 
 async function handleAuthenticated() {
-    const identity = await authClient.getIdentity();
-    currentUser = await backend.createUser();
-    updateProfileLink();
-    renderHome();
+    try {
+        const identity = await authClient.getIdentity();
+        currentUser = await backend.createUser();
+        if (!currentUser) {
+            throw new Error("Failed to create or retrieve user");
+        }
+        updateProfileLink();
+        renderHome();
+    } catch (error) {
+        console.error("Authentication error:", error);
+        alert("An error occurred during authentication. Please try again.");
+        renderLoginButton();
+    }
 }
 
 function updateProfileLink() {
     const profileLink = document.getElementById('profile-link');
     profileLink.textContent = 'My Profile';
-    profileLink.onclick = () => renderProfile(currentUser.id);
+    profileLink.onclick = () => {
+        if (currentUser && currentUser.id) {
+            renderProfile(currentUser.id);
+        } else {
+            console.error("Current user is not properly set");
+            alert("Please log in again to view your profile.");
+            renderLoginButton();
+        }
+    };
 }
 
 function renderHome() {
@@ -47,20 +64,25 @@ function renderHome() {
 }
 
 async function loadBlogPosts() {
-    const posts = await backend.getAllBlogPosts();
-    const blogPostsContainer = document.getElementById('blog-posts');
-    blogPostsContainer.innerHTML = '';
-    for (const post of posts) {
-        const postElement = document.createElement('div');
-        postElement.className = 'blog-post';
-        postElement.innerHTML = `
-            <h3>${post.title}</h3>
-            <p>${post.content.substring(0, 100)}...</p>
-            <a href="#" class="author-link" data-author-id="${post.authorId}">View Author</a>
-        `;
-        blogPostsContainer.appendChild(postElement);
+    try {
+        const posts = await backend.getAllBlogPosts();
+        const blogPostsContainer = document.getElementById('blog-posts');
+        blogPostsContainer.innerHTML = '';
+        for (const post of posts) {
+            const postElement = document.createElement('div');
+            postElement.className = 'blog-post';
+            postElement.innerHTML = `
+                <h3>${post.title}</h3>
+                <p>${post.content.substring(0, 100)}...</p>
+                <a href="#" class="author-link" data-author-id="${post.authorId}">View Author</a>
+            `;
+            blogPostsContainer.appendChild(postElement);
+        }
+        addAuthorLinkListeners();
+    } catch (error) {
+        console.error("Error loading blog posts:", error);
+        alert("Failed to load blog posts. Please try again later.");
     }
-    addAuthorLinkListeners();
 }
 
 function addAuthorLinkListeners() {
@@ -80,41 +102,59 @@ async function renderProfile(userId) {
         return;
     }
 
-    const user = await backend.getUser(userId);
-    if (user) {
-        const content = document.getElementById('content');
-        content.innerHTML = `
-            <h2>User Profile</h2>
-            <img src="${user.picture}" alt="${user.name}" id="profile-picture">
-            <h3 id="profile-name">${user.name}</h3>
-            <p id="profile-bio">${user.bio}</p>
-            ${userId === currentUser.id ? '<button id="edit-profile">Edit Profile</button>' : ''}
-            <h3>Blog Posts</h3>
-            <div id="user-blog-posts"></div>
-        `;
-        if (userId === currentUser.id) {
-            document.getElementById('edit-profile').addEventListener('click', showEditProfileForm);
+    try {
+        const user = await backend.getUser(userId);
+        if (user) {
+            const content = document.getElementById('content');
+            content.innerHTML = `
+                <h2>User Profile</h2>
+                <img src="${user.picture}" alt="${user.name}" id="profile-picture">
+                <h3 id="profile-name">${user.name}</h3>
+                <p id="profile-bio">${user.bio}</p>
+                ${currentUser && currentUser.id === userId ? '<button id="edit-profile">Edit Profile</button>' : ''}
+                <h3>Blog Posts</h3>
+                <div id="user-blog-posts"></div>
+            `;
+            if (currentUser && currentUser.id === userId) {
+                document.getElementById('edit-profile').addEventListener('click', showEditProfileForm);
+            }
+            loadUserBlogPosts(userId);
+        } else {
+            throw new Error("User not found");
         }
-        loadUserBlogPosts(userId);
+    } catch (error) {
+        console.error("Error rendering profile:", error);
+        alert("Failed to load user profile. Please try again later.");
     }
 }
 
 async function loadUserBlogPosts(userId) {
-    const posts = await backend.getBlogPostsByUser(userId);
-    const userBlogPostsContainer = document.getElementById('user-blog-posts');
-    userBlogPostsContainer.innerHTML = '';
-    for (const post of posts) {
-        const postElement = document.createElement('div');
-        postElement.className = 'blog-post';
-        postElement.innerHTML = `
-            <h4>${post.title}</h4>
-            <p>${post.content.substring(0, 100)}...</p>
-        `;
-        userBlogPostsContainer.appendChild(postElement);
+    try {
+        const posts = await backend.getBlogPostsByUser(userId);
+        const userBlogPostsContainer = document.getElementById('user-blog-posts');
+        userBlogPostsContainer.innerHTML = '';
+        for (const post of posts) {
+            const postElement = document.createElement('div');
+            postElement.className = 'blog-post';
+            postElement.innerHTML = `
+                <h4>${post.title}</h4>
+                <p>${post.content.substring(0, 100)}...</p>
+            `;
+            userBlogPostsContainer.appendChild(postElement);
+        }
+    } catch (error) {
+        console.error("Error loading user blog posts:", error);
+        alert("Failed to load user's blog posts. Please try again later.");
     }
 }
 
 function showEditProfileForm() {
+    if (!currentUser) {
+        console.error("Cannot edit profile: currentUser is null");
+        alert("Please log in to edit your profile.");
+        return;
+    }
+
     const content = document.getElementById('content');
     content.innerHTML = `
         <h2>Edit Profile</h2>
@@ -133,13 +173,26 @@ function showEditProfileForm() {
 
 async function handleProfileUpdate(e) {
     e.preventDefault();
-    const name = document.getElementById('name').value;
-    const bio = document.getElementById('bio').value;
-    const picture = document.getElementById('picture').value;
-    const updated = await backend.updateUser(name, bio, picture);
-    if (updated) {
-        currentUser = await backend.getUser(currentUser.id);
-        renderProfile(currentUser.id);
+    if (!currentUser) {
+        console.error("Cannot update profile: currentUser is null");
+        alert("Please log in to update your profile.");
+        return;
+    }
+
+    try {
+        const name = document.getElementById('name').value;
+        const bio = document.getElementById('bio').value;
+        const picture = document.getElementById('picture').value;
+        const updated = await backend.updateUser(name, bio, picture);
+        if (updated) {
+            currentUser = await backend.getUser(currentUser.id);
+            renderProfile(currentUser.id);
+        } else {
+            throw new Error("Failed to update user profile");
+        }
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        alert("Failed to update profile. Please try again later.");
     }
 }
 
@@ -151,7 +204,13 @@ document.getElementById('home-link').addEventListener('click', (e) => {
 document.getElementById('profile-link').addEventListener('click', (e) => {
     e.preventDefault();
     if (authClient.isAuthenticated()) {
-        renderProfile(currentUser.id);
+        if (currentUser && currentUser.id) {
+            renderProfile(currentUser.id);
+        } else {
+            console.error("Current user is not properly set");
+            alert("Please log in again to view your profile.");
+            renderLoginButton();
+        }
     } else {
         login();
     }
