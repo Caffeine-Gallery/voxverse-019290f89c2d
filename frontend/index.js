@@ -52,6 +52,7 @@ async function handleAuthenticated() {
         if (!currentUser || !currentUser.id) {
             throw new Error("Failed to create or retrieve user");
         }
+        currentUser.principal = principal;
         updateAuthButton(true);
         renderHome();
     } catch (error) {
@@ -115,7 +116,14 @@ async function renderProfile(userId) {
         if (!userId || userId === 'undefined') {
             throw new Error("Invalid user ID");
         }
-        const user = await backend.getUser(Principal.fromText(userId));
+        let userPrincipal;
+        try {
+            userPrincipal = Principal.fromText(userId);
+        } catch (error) {
+            console.error("Error converting user ID to Principal:", error);
+            throw new Error("Invalid user ID format");
+        }
+        const user = await backend.getUser(userPrincipal);
         if (user) {
             const content = document.getElementById('content');
             content.innerHTML = `
@@ -130,7 +138,7 @@ async function renderProfile(userId) {
             if (currentUser && currentUser.id === userId) {
                 document.getElementById('edit-profile').addEventListener('click', showEditProfileForm);
             }
-            loadUserBlogPosts(userId);
+            loadUserBlogPosts(userPrincipal);
         } else {
             throw new Error("User not found");
         }
@@ -140,12 +148,9 @@ async function renderProfile(userId) {
     }
 }
 
-async function loadUserBlogPosts(userId) {
+async function loadUserBlogPosts(userPrincipal) {
     try {
-        if (!userId || userId === 'undefined') {
-            throw new Error("Invalid user ID");
-        }
-        const posts = await backend.getBlogPostsByUser(Principal.fromText(userId));
+        const posts = await backend.getBlogPostsByUser(userPrincipal);
         const userBlogPostsContainer = document.getElementById('user-blog-posts');
         userBlogPostsContainer.innerHTML = '';
         for (const post of posts) {
@@ -200,7 +205,7 @@ async function handleProfileUpdate(e) {
         const picture = document.getElementById('picture').value;
         const updated = await backend.updateUser(name, bio, picture);
         if (updated) {
-            currentUser = await backend.getUser(Principal.fromText(currentUser.id));
+            currentUser = await backend.getUser(currentUser.principal);
             renderProfile(currentUser.id);
         } else {
             throw new Error("Failed to update user profile");
@@ -219,7 +224,7 @@ document.getElementById('home-link').addEventListener('click', (e) => {
 document.getElementById('profile-link').addEventListener('click', (e) => {
     e.preventDefault();
     if (authClient.isAuthenticated()) {
-        if (currentUser && currentUser.id) {
+        if (currentUser && currentUser.id && currentUser.principal) {
             renderProfile(currentUser.id);
         } else {
             console.error("Current user is not properly set");
