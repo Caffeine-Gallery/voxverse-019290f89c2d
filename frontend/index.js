@@ -1,24 +1,43 @@
 import { backend } from 'declarations/backend';
 import { AuthClient } from '@dfinity/auth-client';
 
+let authClient;
 let currentUser = null;
 
 async function init() {
-    const authClient = await AuthClient.create();
+    authClient = await AuthClient.create();
     if (await authClient.isAuthenticated()) {
-        handleAuthenticated(authClient);
+        handleAuthenticated();
     } else {
-        await authClient.login({
-            identityProvider: "https://identity.ic0.app/#authorize",
-            onSuccess: () => handleAuthenticated(authClient),
-        });
+        renderLoginButton();
     }
+    renderHome();
 }
 
-async function handleAuthenticated(authClient) {
+function renderLoginButton() {
+    const profileLink = document.getElementById('profile-link');
+    profileLink.textContent = 'Login';
+    profileLink.onclick = login;
+}
+
+async function login() {
+    await authClient.login({
+        identityProvider: "https://identity.ic0.app/#authorize",
+        onSuccess: handleAuthenticated,
+    });
+}
+
+async function handleAuthenticated() {
     const identity = await authClient.getIdentity();
     currentUser = await backend.createUser();
+    updateProfileLink();
     renderHome();
+}
+
+function updateProfileLink() {
+    const profileLink = document.getElementById('profile-link');
+    profileLink.textContent = 'My Profile';
+    profileLink.onclick = () => renderProfile(currentUser.id);
 }
 
 function renderHome() {
@@ -56,6 +75,11 @@ function addAuthorLinkListeners() {
 }
 
 async function renderProfile(userId) {
+    if (!authClient.isAuthenticated()) {
+        alert("Please login to view profiles.");
+        return;
+    }
+
     const user = await backend.getUser(userId);
     if (user) {
         const content = document.getElementById('content');
@@ -126,8 +150,10 @@ document.getElementById('home-link').addEventListener('click', (e) => {
 
 document.getElementById('profile-link').addEventListener('click', (e) => {
     e.preventDefault();
-    if (currentUser) {
+    if (authClient.isAuthenticated()) {
         renderProfile(currentUser.id);
+    } else {
+        login();
     }
 });
 
