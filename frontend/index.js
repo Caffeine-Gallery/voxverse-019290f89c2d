@@ -1,5 +1,6 @@
 import { backend } from 'declarations/backend';
 import { AuthClient } from '@dfinity/auth-client';
+import { Principal } from '@dfinity/principal';
 
 let authClient;
 let currentUser = null;
@@ -7,7 +8,7 @@ let currentUser = null;
 async function init() {
     authClient = await AuthClient.create();
     if (await authClient.isAuthenticated()) {
-        handleAuthenticated();
+        await handleAuthenticated();
     } else {
         updateAuthButton(false);
     }
@@ -46,8 +47,9 @@ async function logout() {
 async function handleAuthenticated() {
     try {
         const identity = await authClient.getIdentity();
+        const principal = identity.getPrincipal();
         currentUser = await backend.createUser();
-        if (!currentUser) {
+        if (!currentUser || !currentUser.id) {
             throw new Error("Failed to create or retrieve user");
         }
         updateAuthButton(true);
@@ -93,7 +95,12 @@ function addAuthorLinkListeners() {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             const authorId = e.target.getAttribute('data-author-id');
-            renderProfile(authorId);
+            if (authorId) {
+                renderProfile(authorId);
+            } else {
+                console.error("Invalid author ID");
+                alert("Unable to view author profile. Please try again later.");
+            }
         });
     });
 }
@@ -105,7 +112,10 @@ async function renderProfile(userId) {
     }
 
     try {
-        const user = await backend.getUser(userId);
+        if (!userId || userId === 'undefined') {
+            throw new Error("Invalid user ID");
+        }
+        const user = await backend.getUser(Principal.fromText(userId));
         if (user) {
             const content = document.getElementById('content');
             content.innerHTML = `
@@ -132,7 +142,10 @@ async function renderProfile(userId) {
 
 async function loadUserBlogPosts(userId) {
     try {
-        const posts = await backend.getBlogPostsByUser(userId);
+        if (!userId || userId === 'undefined') {
+            throw new Error("Invalid user ID");
+        }
+        const posts = await backend.getBlogPostsByUser(Principal.fromText(userId));
         const userBlogPostsContainer = document.getElementById('user-blog-posts');
         userBlogPostsContainer.innerHTML = '';
         for (const post of posts) {
@@ -151,8 +164,8 @@ async function loadUserBlogPosts(userId) {
 }
 
 function showEditProfileForm() {
-    if (!currentUser) {
-        console.error("Cannot edit profile: currentUser is null");
+    if (!currentUser || !currentUser.id) {
+        console.error("Cannot edit profile: currentUser is invalid");
         alert("Please log in to edit your profile.");
         return;
     }
@@ -175,8 +188,8 @@ function showEditProfileForm() {
 
 async function handleProfileUpdate(e) {
     e.preventDefault();
-    if (!currentUser) {
-        console.error("Cannot update profile: currentUser is null");
+    if (!currentUser || !currentUser.id) {
+        console.error("Cannot update profile: currentUser is invalid");
         alert("Please log in to update your profile.");
         return;
     }
@@ -187,7 +200,7 @@ async function handleProfileUpdate(e) {
         const picture = document.getElementById('picture').value;
         const updated = await backend.updateUser(name, bio, picture);
         if (updated) {
-            currentUser = await backend.getUser(currentUser.id);
+            currentUser = await backend.getUser(Principal.fromText(currentUser.id));
             renderProfile(currentUser.id);
         } else {
             throw new Error("Failed to update user profile");
